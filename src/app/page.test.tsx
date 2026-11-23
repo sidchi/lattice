@@ -13,6 +13,14 @@ describe("HomePage", () => {
     expect(headings[0]).toHaveTextContent(site.tagline);
   });
 
+  it("links to the signed-in area", () => {
+    render(<HomePage />);
+    expect(screen.getByRole("link", { name: "Start practicing" })).toHaveAttribute(
+      "href",
+      "/dashboard",
+    );
+  });
+
   it("lists every practice track", () => {
     render(<HomePage />);
     const list = screen.getByRole("list");

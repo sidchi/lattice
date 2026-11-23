@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { practiceTracks, site } from "@/lib/site";
 
 export default function HomePage() {
@@ -9,6 +11,14 @@ export default function HomePage() {
           {site.tagline}
         </h1>
         <p className="text-muted text-lg text-pretty">{site.description}</p>
+        <div>
+          <Link
+            href="/dashboard"
+            className="bg-accent text-background inline-flex rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
+          >
+            Start practicing
+          </Link>
+        </div>
       </header>
 
       <section aria-labelledby="tracks-heading" className="flex flex-col gap-4">
@@ -26,7 +36,7 @@ export default function HomePage() {
       </section>
 
       <footer className="text-muted text-sm">
-        Early access: sign-in, the question bank and practice sessions are on the way.
+        Early access: the question bank and practice sessions are on the way.
       </footer>
     </main>
   );
