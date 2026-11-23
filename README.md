@@ -5,7 +5,7 @@
 Interview practice platform: a curated question bank, timed mock interviews, and rubric-based AI
 feedback that tracks your weak areas over time.
 
-> Status: early scaffold. See [ROADMAP.md](ROADMAP.md) for what is built and what is next.
+> Status: early development (data model and Google sign-in are in). See [ROADMAP.md](ROADMAP.md) for what is built and what is next.
 
 ## Why
 
@@ -35,6 +35,7 @@ Boxes below the app are planned; the roadmap adds them one PR at a time.
 | Styling       | Tailwind CSS v4 with CSS-variable design tokens              |
 | Config        | `zod`-validated environment (`src/lib/env.ts`)               |
 | Data          | Prisma 7 (driver adapters, no query engine), SQLite in dev   |
+| Auth          | NextAuth v4, Google OAuth, encrypted JWT session cookies     |
 | Testing       | Vitest + Testing Library (jsdom), v8 coverage                |
 | Quality gates | ESLint (`next/core-web-vitals`, `next/typescript`), Prettier |
 | CI            | GitHub Actions: lint → format → type-check → test → build    |
@@ -52,6 +53,19 @@ npm run dev                  # http://localhost:3000
 ```
 
 Health check: `curl localhost:3000/api/health`.
+
+### Enabling Google sign-in
+
+Sign-in is off until it is configured; `/signin` then shows setup instructions instead of the
+Google button.
+
+1. In Google Cloud Console, create an **OAuth client ID** of type _Web application_.
+2. Add the authorized redirect URI `http://localhost:3000/api/auth/callback/google`.
+3. Put `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and a `NEXTAUTH_SECRET`
+   (`openssl rand -base64 32`) in `.env.local` and restart `npm run dev`.
+
+Env validation refuses a half-configured setup (only one Google credential, or Google without a
+secret) at startup rather than at the first sign-in.
 
 ## Scripts
 
@@ -97,12 +111,46 @@ unknown company tags), then upserts on slugs inside one transaction, so it is sa
 after editing questions. CI applies the migrations to a fresh database, fails if
 `prisma migrate diff` finds any drift from `schema.prisma`, and runs the seed.
 
+## Authentication
+
+```
+ /dashboard ──▶ middleware: valid session cookie? ──no──▶ /signin?callbackUrl=/dashboard
+                    │ yes                                   │ "Continue with Google"
+                    ▼                                       ▼
+            page: requireUser() ◀── session cookie ── /api/auth/callback/google
+                                    (our User.id)        signIn: verified email only
+                                                         jwt: upsert User by email
+```
+
+- **Google OAuth via NextAuth v4** (`src/lib/auth/options.ts`). Only verified Google emails are
+  accepted, because users are keyed on email. On first sign-in the `jwt` callback upserts the
+  `User` row and puts _our_ id, not Google's subject id, into the token. `session.user.id` is
+  that id everywhere.
+- **JWT sessions, no session table.** The cookie is an encrypted JWT (30-day rolling expiry), so
+  checking a session is a decrypt, not a query, and middleware stays Edge-compatible. The cost is
+  revocation: signing out clears one browser, and a stolen cookie stays valid until it expires.
+  If that matters later, switch to database sessions or add a per-user `tokenVersion` checked in
+  the `jwt` callback.
+- **Two layers of protection.** `src/middleware.ts` redirects anonymous requests to `/signin`
+  early (cheap, cookie-only). Pages call `requireUser()` from `src/auth.ts`, which is the actual
+  authorization check, so a middleware bypass or a missing matcher entry can't expose data.
+- **No open redirects.** `callbackUrl` is reduced to a same-origin path
+  (`src/lib/auth/paths.ts`); absolute, protocol-relative and backslash URLs fall back to
+  `/dashboard`. Error codes on `/signin` map to fixed copy and are never echoed.
+- **Testable seams.** The callbacks depend on a `UserStore` interface. Unit tests drive them with
+  a mocked Google profile and an in-memory store. The Prisma store is tested against a real
+  SQLite database, and the middleware against real encrypted cookies.
+
 ## Project layout
 
 ```
 src/
   app/            routes (pages, layouts, route handlers) with colocated tests
-  lib/            framework-agnostic logic: env validation, Prisma client, seed, health report
+  auth.ts         server-side session helpers: getCurrentUser(), requireUser()
+  middleware.ts   early redirect for protected routes
+  components/     shared UI (sign-in / sign-out buttons)
+  lib/            framework-agnostic logic: env validation, auth rules, Prisma client, seed
+  types/          module augmentation (NextAuth session shape)
   generated/      Prisma client (generated on install, git-ignored)
   test/           Vitest setup and a throwaway-SQLite helper for database tests
 prisma/           schema, migrations, seed entry point

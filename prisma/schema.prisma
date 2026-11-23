@@ -4,9 +4,10 @@
 // (roadmap item 9). Everything here is portable across both: no arrays, no JSON columns,
 // and enums are stored as TEXT on SQLite.
 //
-// Naming note: the interview "session" from the roadmap is `PracticeSession`. Auth.js's
-// Prisma adapter (roadmap item 3) requires its own model literally named `Session`, so
-// the domain concept takes the more specific name up front instead of being renamed later.
+// Naming note: the interview "session" from the roadmap is `PracticeSession`, so "session"
+// stays unambiguous next to login sessions. Login sessions are encrypted JWT cookies (see
+// src/lib/auth/options.ts), so there is no Auth.js `Session`/`Account` table; if database
+// sessions are ever needed, the adapter's `Session` model name is still free.
 
 generator client {
   provider = "prisma-client"
