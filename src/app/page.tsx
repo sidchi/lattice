@@ -13,7 +13,7 @@ export default function HomePage() {
         <p className="text-muted text-lg text-pretty">{site.description}</p>
         <div className="flex flex-wrap gap-3">
           <Link
-            href="/dashboard"
+            href="/practice"
             className="bg-accent text-background inline-flex rounded-md px-4 py-2 text-sm font-semibold transition-opacity hover:opacity-90"
           >
             Start practicing
@@ -49,7 +49,7 @@ export default function HomePage() {
       </section>
 
       <footer className="text-muted text-sm">
-        Early access: browse the question bank now; timed practice sessions are on the way.
+        Early access: timed practice is live; rubric-based AI feedback is next.
       </footer>
     </main>
   );

@@ -19,14 +19,20 @@ export default async function DashboardPage() {
         </div>
         <SignOutButton />
       </header>
-      <p className="text-muted">
-        Your practice sessions and progress will appear here once timed practice lands. In the
-        meantime,{" "}
-        <Link href="/questions" className="text-accent underline underline-offset-4">
-          browse the question bank
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/practice"
+          className="bg-accent text-background rounded-md px-4 py-2 text-sm font-semibold"
+        >
+          Start practicing
         </Link>
-        .
-      </p>
+        <Link
+          href="/questions"
+          className="border-border rounded-md border px-4 py-2 text-sm font-medium"
+        >
+          Browse the question bank
+        </Link>
+      </div>
     </main>
   );
 }
