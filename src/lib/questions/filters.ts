@@ -125,3 +125,19 @@ export function formatTimeLimit(seconds: number): string {
   const rest = minutes % 60;
   return rest ? `${hours} h ${rest} min` : `${hours} h`;
 }
+
+/**
+ * The URL the browser is on, rebuilt from `searchParams`, for comparison with the canonical
+ * {@link questionsHref}. A GET filter form submits empty selects as `company=`, and links may
+ * carry stray or misspelled parameters; the page redirects those to the canonical URL.
+ */
+export function requestedHref(params: SearchParams): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    for (const item of Array.isArray(value) ? value : value === undefined ? [] : [value]) {
+      query.append(key, item);
+    }
+  }
+  const search = query.toString();
+  return search ? `${QUESTIONS_PATH}?${search}` : QUESTIONS_PATH;
+}

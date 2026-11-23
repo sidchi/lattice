@@ -11,6 +11,7 @@ import {
   hasActiveFilters,
   parseQuestionFilters,
   questionsHref,
+  requestedHref,
   type QuestionFilters,
 } from "./filters";
 
@@ -158,5 +159,20 @@ describe("formatTimeLimit", () => {
     [10, "1 min"],
   ])("formats %d seconds as %j", (seconds, expected) => {
     expect(formatTimeLimit(seconds)).toBe(expected);
+  });
+});
+
+describe("requestedHref", () => {
+  it("rebuilds the query in its original order, including empty and repeated values", () => {
+    expect(requestedHref({})).toBe("/questions");
+    expect(requestedHref({ company: "", category: ["coding", "behavioral"] })).toBe(
+      "/questions?company=&category=coding&category=behavioral",
+    );
+  });
+
+  it("equals the canonical href for a canonical URL", () => {
+    const href = "/questions?category=coding&difficulty=hard&page=2";
+    const params = Object.fromEntries(new URL(href, "http://x").searchParams);
+    expect(requestedHref(params)).toBe(questionsHref(parseQuestionFilters(params)));
   });
 });
