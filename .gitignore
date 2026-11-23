@@ -42,3 +42,8 @@ next-env.d.ts
 
 # allow the documented template
 !.env.example
+
+# prisma: generated client (npm install runs `prisma generate`) and local SQLite files
+/src/generated/
+*.db
+*.db-journal

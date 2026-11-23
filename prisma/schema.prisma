@@ -1,0 +1,166 @@
+// Lattice data model.
+//
+// SQLite in development (via the better-sqlite3 driver adapter), Postgres in production
+// (roadmap item 9). Everything here is portable across both: no arrays, no JSON columns,
+// and enums are stored as TEXT on SQLite.
+//
+// Naming note: the interview "session" from the roadmap is `PracticeSession`. Auth.js's
+// Prisma adapter (roadmap item 3) requires its own model literally named `Session`, so
+// the domain concept takes the more specific name up front instead of being renamed later.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum QuestionCategory {
+  SYSTEM_DESIGN
+  BEHAVIORAL
+  CODING
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum PracticeSessionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  ABANDONED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  practiceSessions PracticeSession[]
+}
+
+/// A company a question is commonly associated with. Tags are illustrative topic fits,
+/// not claims that a company asked the question.
+model Company {
+  id   String @id @default(cuid())
+  /// URL-safe, stable identifier used by filters (e.g. "stripe").
+  slug String @unique
+  name String @unique
+
+  questions QuestionCompany[]
+}
+
+model Question {
+  id           String           @id @default(cuid())
+  /// Stable natural key. The seed upserts on it, so editing a question's text in the seed
+  /// data updates the row instead of duplicating it.
+  slug         String           @unique
+  title        String
+  prompt       String
+  category     QuestionCategory
+  difficulty   Difficulty
+  /// Suggested time box for a mock interview, in seconds.
+  timeLimitSec Int
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  companies QuestionCompany[]
+  answers   Answer[]
+
+  @@index([category, difficulty])
+}
+
+/// Explicit many-to-many join so the composite key and index are visible in migrations
+/// and portable between SQLite and Postgres.
+model QuestionCompany {
+  questionId String
+  companyId  String
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, companyId])
+  @@index([companyId])
+}
+
+/// One timed mock interview: a user answering one or more questions.
+model PracticeSession {
+  id           String                @id @default(cuid())
+  userId       String
+  status       PracticeSessionStatus @default(IN_PROGRESS)
+  /// Time box for the whole session, copied from the questions at start so later edits to
+  /// a question's limit do not rewrite history.
+  timeLimitSec Int
+  startedAt    DateTime              @default(now())
+  submittedAt  DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers Answer[]
+
+  @@index([userId, startedAt])
+}
+
+model Answer {
+  id           String    @id @default(cuid())
+  sessionId    String
+  questionId   String
+  /// Order of the question within its session, starting at 0.
+  position     Int
+  content      String    @default("")
+  /// Time actually spent on this answer, tracked client-side and saved with progress.
+  timeSpentSec Int       @default(0)
+  submittedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  session  PracticeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// Restrict: a question with answers is history and must not silently disappear.
+  question Question        @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  feedback Feedback?
+
+  @@unique([sessionId, questionId])
+  @@unique([sessionId, position])
+  @@index([questionId])
+}
+
+/// Rubric-based evaluation of one answer (roadmap item 6). One per answer; regenerating
+/// feedback replaces it.
+model Feedback {
+  id           String   @id @default(cuid())
+  answerId     String   @unique
+  /// Overall score on a 1-5 scale.
+  overallScore Int
+  summary      String
+  /// Identifier of the evaluator that produced this feedback (model name or "mock").
+  evaluator    String
+  createdAt    DateTime @default(now())
+
+  answer Answer          @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  scores FeedbackScore[]
+}
+
+/// Score for a single rubric dimension. Stored as rows rather than a JSON blob so
+/// "weakest dimensions over time" (roadmap item 7) is a plain GROUP BY.
+model FeedbackScore {
+  id         String  @id @default(cuid())
+  feedbackId String
+  /// Rubric dimension key, e.g. "tradeoffs" or "communication".
+  dimension  String
+  /// Score on a 1-5 scale.
+  score      Int
+  comment    String?
+
+  feedback Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@unique([feedbackId, dimension])
+  @@index([dimension])
+}
