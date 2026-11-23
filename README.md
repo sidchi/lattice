@@ -5,7 +5,7 @@
 Interview practice platform: a curated question bank, timed mock interviews, and rubric-based AI
 feedback that tracks your weak areas over time.
 
-> Status: early development (data model and Google sign-in are in). See [ROADMAP.md](ROADMAP.md) for what is built and what is next.
+> Status: early development (data model, Google sign-in and the question bank are in). See [ROADMAP.md](ROADMAP.md) for what is built and what is next.
 
 ## Why
 
@@ -111,6 +111,40 @@ unknown company tags), then upserts on slugs inside one transaction, so it is sa
 after editing questions. CI applies the migrations to a fresh database, fails if
 `prisma migrate diff` finds any drift from `schema.prisma`, and runs the seed.
 
+## Question bank
+
+`/questions` lists the bank with category, difficulty and company filters; `/questions/<slug>`
+shows the full prompt. Both are public: browsing should not need an account, while practice
+sessions (`/practice`, `/history`) do.
+
+```
+/questions?category=coding&difficulty=hard&company=stripe&page=2
+           └──────────── parseQuestionFilters() ─────────────┘
+                                │  forgiving: bad values drop that one filter
+                                ▼
+            listQuestions()  +  getQuestionFacets()      (src/lib/questions/repository.ts)
+                                │
+                                ▼
+            questionsHref(filters) === requested URL ? render : redirect(canonical)
+```
+
+- **URL is the state.** Filters are query parameters with public slugs (`system-design`, not
+  `SYSTEM_DESIGN`), so every view is linkable and the back button works. The filter form is a
+  plain GET form: no client JavaScript, no client state to keep in sync.
+- **One URL per view.** A GET form submits empty selects (`?category=&company=`), and links pick up
+  stray parameters. The page redirects any non-canonical query, including a page past the end,
+  to the canonical URL built by `questionsHref()`, which also makes caching and analytics simpler.
+- **Faceted counts.** Each filter option shows how many questions it would return. Each facet
+  applies every _other_ active filter but not its own (the usual faceted-search rule), so with
+  `category=coding` selected the category list still shows the system-design count. Zero-count
+  options are disabled rather than hidden, so the list does not jump around.
+- **Deterministic paging.** Ordered by title, then slug. Ordering by difficulty would sort
+  alphabetically (`EASY, HARD, MEDIUM`) because enums are `TEXT` on SQLite. Paging is
+  `OFFSET`-based, which is fine for a bank of hundreds; a large, frequently changing list would
+  want keyset pagination.
+- **Tested end to end.** The read model and both pages are tested against a real SQLite database
+  loaded with the real seed, not mocked query results.
+
 ## Authentication
 
 ```
@@ -148,8 +182,9 @@ src/
   app/            routes (pages, layouts, route handlers) with colocated tests
   auth.ts         server-side session helpers: getCurrentUser(), requireUser()
   middleware.ts   early redirect for protected routes
-  components/     shared UI (sign-in / sign-out buttons)
-  lib/            framework-agnostic logic: env validation, auth rules, Prisma client, seed
+  components/     shared UI (auth buttons, question badges, filters, pagination)
+  lib/            framework-agnostic logic: env validation, auth rules, Prisma client, seed,
+                  question bank filters and read model
   types/          module augmentation (NextAuth session shape)
   generated/      Prisma client (generated on install, git-ignored)
   test/           Vitest setup and a throwaway-SQLite helper for database tests
