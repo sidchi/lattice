@@ -15,3 +15,16 @@ export function startErrorMessage(code: string | string[] | undefined): string |
   const key = Array.isArray(code) ? code[0] : code;
   return key && Object.hasOwn(startErrorMessages, key) ? startErrorMessages[key]! : null;
 }
+
+/** Messages for the feedback outcome the feedback action reports via `?feedback=`. */
+export const feedbackStatusMessages: Record<string, string> = {
+  partial:
+    "Feedback couldn't be generated for some answers. Try again; answers that already have feedback are kept.",
+  failed: "Feedback couldn't be generated. Try again in a moment.",
+  not_submitted: "Feedback is available once the session is submitted.",
+};
+
+export function feedbackStatusMessage(code: string | string[] | undefined): string | null {
+  const key = Array.isArray(code) ? code[0] : code;
+  return key && Object.hasOwn(feedbackStatusMessages, key) ? feedbackStatusMessages[key]! : null;
+}

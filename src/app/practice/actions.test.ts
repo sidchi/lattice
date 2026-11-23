@@ -4,16 +4,25 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 import { requireUser } from "@/auth";
 import { getPrisma } from "@/lib/db";
+import type { AnswerEvaluator } from "@/lib/feedback/evaluator";
+import { getEvaluator } from "@/lib/feedback/factory";
 import { seedQuestionBank } from "@/lib/seed/seed";
 import { createTestDatabase, type TestDatabase } from "@/test/db";
+import { evaluationFor } from "@/test/feedback";
 
-import { savePracticeAction, startPracticeAction, submitPracticeAction } from "./actions";
+import {
+  requestFeedbackAction,
+  savePracticeAction,
+  startPracticeAction,
+  submitPracticeAction,
+} from "./actions";
 
 vi.mock("@/auth", () => ({ requireUser: vi.fn() }));
 vi.mock(import("@/lib/db"), async (importOriginal) => ({
   ...(await importOriginal()),
   getPrisma: vi.fn(),
 }));
+vi.mock("@/lib/feedback/factory", () => ({ getEvaluator: vi.fn() }));
 vi.mock("next/navigation", () => ({
   redirect: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
@@ -142,5 +151,89 @@ describe("savePracticeAction / submitPracticeAction", () => {
     });
     expect(await savePracticeAction(id, [])).toEqual({ ok: false, error: "not_found" });
     expect(await submitPracticeAction(id, [])).toEqual({ ok: false, error: "not_found" });
+  });
+});
+
+describe("requestFeedbackAction", () => {
+  const evaluator: AnswerEvaluator = {
+    id: "fake:model-1",
+    evaluate: vi.fn(async (input) => evaluationFor(input.question.category, 4)),
+  };
+
+  beforeEach(() => {
+    vi.mocked(getEvaluator).mockReturnValue(evaluator);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  async function submitted(): Promise<string> {
+    const id = await start({ mode: "question", question: "design-rate-limiter" });
+    const answer = await db.prisma.answer.findFirstOrThrow({ where: { sessionId: id } });
+    await expect(
+      submitPracticeAction(id, [
+        { answerId: answer.id, content: "Token bucket per key in Redis.", timeSpentSec: 120 },
+      ]),
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+    return id;
+  }
+
+  const feedbackForm = (id: string, regenerate = false) =>
+    form({ sessionId: id, ...(regenerate && { regenerate: "true" }) });
+
+  it("generates feedback with the configured evaluator and reloads the review", async () => {
+    const id = await submitted();
+    await expect(requestFeedbackAction(feedbackForm(id))).rejects.toThrow(
+      `NEXT_REDIRECT:/practice/${id}`,
+    );
+    expect(requireUser).toHaveBeenLastCalledWith(`/practice/${id}`);
+    const feedback = await db.prisma.feedback.findFirstOrThrow({
+      where: { answer: { sessionId: id } },
+    });
+    expect(feedback).toMatchObject({ overallScore: 4, evaluator: "fake:model-1" });
+  });
+
+  it("regenerates only when the form asks to", async () => {
+    const id = await submitted();
+    await expect(requestFeedbackAction(feedbackForm(id))).rejects.toThrow(/NEXT_REDIRECT/);
+    vi.mocked(evaluator.evaluate).mockClear();
+
+    await expect(requestFeedbackAction(feedbackForm(id))).rejects.toThrow(/NEXT_REDIRECT/);
+    expect(evaluator.evaluate).not.toHaveBeenCalled();
+    await expect(requestFeedbackAction(feedbackForm(id, true))).rejects.toThrow(/NEXT_REDIRECT/);
+    expect(evaluator.evaluate).toHaveBeenCalledOnce();
+  });
+
+  it("reports a failed evaluation on the review page", async () => {
+    const id = await submitted();
+    vi.mocked(evaluator.evaluate).mockRejectedValueOnce(new Error("provider down"));
+    await expect(requestFeedbackAction(feedbackForm(id))).rejects.toThrow(
+      `NEXT_REDIRECT:/practice/${id}?feedback=failed`,
+    );
+  });
+
+  it("refuses a session that is still in progress", async () => {
+    const id = await start({ mode: "question", question: "design-rate-limiter" });
+    await expect(requestFeedbackAction(feedbackForm(id))).rejects.toThrow(
+      `NEXT_REDIRECT:/practice/${id}?feedback=not_submitted`,
+    );
+  });
+
+  it("sends missing, malformed and foreign session ids to the practice page", async () => {
+    await expect(requestFeedbackAction(form({}))).rejects.toThrow("NEXT_REDIRECT:/practice");
+    expect(requireUser).toHaveBeenLastCalledWith("/practice/");
+    await expect(requestFeedbackAction(form({ sessionId: "x".repeat(65) }))).rejects.toThrow(
+      /^NEXT_REDIRECT:\/practice$/,
+    );
+
+    const id = await submitted();
+    vi.mocked(requireUser).mockResolvedValue({
+      id: "someone-else",
+      email: "eve@example.com",
+      name: null,
+      image: null,
+    });
+    await expect(requestFeedbackAction(feedbackForm(id))).rejects.toThrow(
+      /^NEXT_REDIRECT:\/practice$/,
+    );
+    expect(evaluator.evaluate).not.toHaveBeenCalled();
   });
 });

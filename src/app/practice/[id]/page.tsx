@@ -3,26 +3,38 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireUser } from "@/auth";
+import { FeedbackForm } from "@/components/feedback/feedback-form";
+import { FeedbackPanel } from "@/components/feedback/feedback-panel";
 import { PracticeRunner } from "@/components/practice/practice-runner";
 import { QuestionBadges } from "@/components/questions/question-badges";
 import { getPrisma } from "@/lib/db";
-import { PRACTICE_PATH, practiceHref } from "@/lib/practice/paths";
+import { getSessionFeedback } from "@/lib/feedback/service";
+import { feedbackStatusMessage, PRACTICE_PATH, practiceHref } from "@/lib/practice/paths";
 import { getSession } from "@/lib/practice/service";
 import { formatTimeSpent } from "@/lib/practice/timer";
 import { formatTimeLimit } from "@/lib/questions/filters";
 
-import { savePracticeAction, submitPracticeAction } from "../actions";
+import { requestFeedbackAction, savePracticeAction, submitPracticeAction } from "../actions";
 
 export const metadata: Metadata = { title: "Practice session" };
 
 type Params = { id: string };
+type SearchParams = Record<string, string | string[] | undefined>;
 
 /**
  * One practice session. While in progress it renders the timed runner; once submitted (or
- * expired, which the service finalizes on load) it renders a read-only review.
+ * expired, which the service finalizes on load) it renders a read-only review with rubric
+ * feedback per answer, generated on request.
  */
-export default async function PracticeSessionPage({ params }: { params: Promise<Params> }) {
+export default async function PracticeSessionPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<Params>;
+  searchParams?: Promise<SearchParams>;
+}) {
   const { id } = await params;
+  const query = (await searchParams) ?? {};
   const user = await requireUser(practiceHref(id));
   const now = new Date();
   const result = await getSession(getPrisma(), user.id, id, { now });
@@ -52,6 +64,10 @@ export default async function PracticeSessionPage({ params }: { params: Promise<
     );
   }
 
+  const feedback = await getSessionFeedback(getPrisma(), user.id, session.id);
+  const pending = session.answers.filter((answer) => !feedback.has(answer.id)).length;
+  const status = feedbackStatusMessage(query.feedback);
+
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-12 sm:px-6">
       <header className="flex flex-col gap-2">
@@ -63,9 +79,22 @@ export default async function PracticeSessionPage({ params }: { params: Promise<
         </Link>
         <h1 className="text-3xl font-bold tracking-tight">Session submitted</h1>
         <p className="text-muted">
-          Rubric-based feedback on each answer is the next feature on the roadmap. For now, review
-          what you wrote and how long each answer took.
+          {pending === 0
+            ? "Each answer is scored 1-5 on the rubric an interviewer would use for its category."
+            : "Review what you wrote, then get rubric-based feedback on each answer."}
         </p>
+        {status && (
+          <p role="alert" className="rounded-md border border-amber-500/50 px-3 py-2 text-sm">
+            {status}
+          </p>
+        )}
+        <div>
+          <FeedbackForm
+            sessionId={session.id}
+            regenerate={pending === 0}
+            action={requestFeedbackAction}
+          />
+        </div>
       </header>
 
       <ol className="flex flex-col gap-8">
@@ -88,6 +117,11 @@ export default async function PracticeSessionPage({ params }: { params: Promise<
               </pre>
             ) : (
               <p className="text-muted italic">No answer written.</p>
+            )}
+            {feedback.has(answer.id) ? (
+              <FeedbackPanel feedback={feedback.get(answer.id)!} />
+            ) : (
+              <p className="text-muted text-sm">No feedback yet.</p>
             )}
           </li>
         ))}
