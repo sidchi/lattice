@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { requireUser } from "@/auth";
 import { SignOutButton } from "@/components/auth/auth-buttons";
@@ -19,8 +20,12 @@ export default async function DashboardPage() {
         <SignOutButton />
       </header>
       <p className="text-muted">
-        Your practice sessions and progress will appear here as the question bank and practice flow
-        land.
+        Your practice sessions and progress will appear here once timed practice lands. In the
+        meantime,{" "}
+        <Link href="/questions" className="text-accent underline underline-offset-4">
+          browse the question bank
+        </Link>
+        .
       </p>
     </main>
   );

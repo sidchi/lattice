@@ -21,6 +21,24 @@ describe("HomePage", () => {
     );
   });
 
+  it("links to the public question bank", () => {
+    render(<HomePage />);
+    expect(screen.getByRole("link", { name: "Browse questions" })).toHaveAttribute(
+      "href",
+      "/questions",
+    );
+  });
+
+  it("links each practice track to its filtered question list", () => {
+    render(<HomePage />);
+    for (const track of practiceTracks) {
+      expect(screen.getByRole("link", { name: track.title })).toHaveAttribute(
+        "href",
+        `/questions?category=${track.slug}`,
+      );
+    }
+  });
+
   it("lists every practice track", () => {
     render(<HomePage />);
     const list = screen.getByRole("list");

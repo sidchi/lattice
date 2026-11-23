@@ -23,6 +23,10 @@ describe("DashboardPage", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Welcome, Ada Lovelace");
     expect(screen.getByText("Signed in as ada@example.com")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "browse the question bank" })).toHaveAttribute(
+      "href",
+      "/questions",
+    );
   });
 
   it("falls back to the email when the profile has no name", async () => {
