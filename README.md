@@ -145,6 +145,43 @@ sessions (`/practice`, `/history`) do.
 - **Tested end to end.** The read model and both pages are tested against a real SQLite database
   loaded with the real seed, not mocked query results.
 
+## Practice sessions
+
+`/practice` starts a timed mock interview: one question from its detail page ("Practice this
+question"), or 1-3 random questions filtered by category and difficulty. `/practice/<id>` runs
+the session and, once it is submitted, shows a read-only review.
+
+```
+ start ──▶ PracticeSession IN_PROGRESS ──submit / deadline + 30 s grace──▶ SUBMITTED
+            answers pre-created empty          (one-way, guarded by a conditional UPDATE)
+               ▲
+               │ autosave every 15 s while dirty, on question switch, and on "Save now"
+          PracticeRunner (client) ── countdown from the server deadline, clock skew removed
+```
+
+- **The server owns the clock.** The deadline is `startedAt + timeLimitSec`, both stored when the
+  session starts (the time box is copied from the questions, so later edits can't move it). The
+  browser renders a countdown corrected for its own clock offset, and auto-submits at zero. The
+  server accepts writes until the deadline plus a 30-second grace period, which absorbs network
+  latency, not extra thinking time.
+- **No background job for expiry.** A session whose grace period has passed is finalized lazily
+  on its next read or write, with `submittedAt` set to the deadline and the last autosave as the
+  answer. A closed laptop still ends up with a correctly submitted session.
+- **Race-safe, idempotent writes.** Saves and submit run in a transaction that rechecks the status,
+  and the status flip is a conditional `UPDATE … WHERE status = 'IN_PROGRESS'`, so a late autosave
+  cannot modify a submitted session. Submitting twice is a no-op success (double clicks, retries).
+  Time spent per answer only grows and is capped at the time box, so a stale second tab cannot
+  roll it back.
+- **Server actions are endpoints.** Every action re-authenticates with `requireUser()` and
+  validates its arguments with zod. Ownership is part of every query, and another user's session
+  id behaves exactly like a missing one (`not_found`, 404), so ids cannot be probed.
+- **Time is measured, not counted.** The runner credits wall-clock time to the question on
+  screen whenever it saves or switches, because background tabs throttle `setInterval` to a
+  minute or more.
+
+Trade-off: two tabs editing the same answer are last-write-wins. An answer `version` column with
+compare-and-set would detect it; for a single-user practice tool the simpler model wins.
+
 ## Authentication
 
 ```
@@ -182,9 +219,9 @@ src/
   app/            routes (pages, layouts, route handlers) with colocated tests
   auth.ts         server-side session helpers: getCurrentUser(), requireUser()
   middleware.ts   early redirect for protected routes
-  components/     shared UI (auth buttons, question badges, filters, pagination)
+  components/     shared UI (auth buttons, question badges, filters, pagination, practice runner)
   lib/            framework-agnostic logic: env validation, auth rules, Prisma client, seed,
-                  question bank filters and read model
+                  question bank filters and read model, practice session lifecycle and timer
   types/          module augmentation (NextAuth session shape)
   generated/      Prisma client (generated on install, git-ignored)
   test/           Vitest setup and a throwaway-SQLite helper for database tests
