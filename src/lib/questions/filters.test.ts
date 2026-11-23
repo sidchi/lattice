@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Difficulty, QuestionCategory } from "@/generated/prisma/enums";
+import { practiceTracks } from "@/lib/site";
 
 import {
   categoryLabel,
@@ -147,6 +148,14 @@ describe("labels", () => {
     expect(difficultyOptions.map((o) => o.value).sort()).toEqual(Object.values(Difficulty).sort());
     expect(categoryLabel(QuestionCategory.SYSTEM_DESIGN)).toBe("System design");
     expect(difficultyLabel(Difficulty.MEDIUM)).toBe("Medium");
+  });
+});
+
+describe("practice tracks", () => {
+  it("use category slugs, so the home page can link to /questions?category=<track>", () => {
+    for (const track of practiceTracks) {
+      expect(parseQuestionFilters({ category: track.slug }).category).toBeDefined();
+    }
   });
 });
 
