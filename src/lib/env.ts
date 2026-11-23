@@ -3,9 +3,9 @@ import { z } from "zod";
 /**
  * Server-side environment schema.
  *
- * Variables needed by later roadmap items (database, auth) are optional for now so the
- * scaffold builds and runs with zero configuration. They are tightened as each feature
- * lands, which keeps "works on a fresh clone" true at every step.
+ * Everything is optional so a fresh clone builds and runs with zero configuration: the
+ * database defaults to a local SQLite file and sign-in stays off until Google OAuth is
+ * configured. Cross-field rules (see {@link parseServerEnv}) reject half-configured setups.
  */
 const serverEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -45,13 +45,40 @@ export function parseServerEnv(source: Record<string, string | undefined>): Serv
   }
 
   const env = result.data;
+  const issues: string[] = [];
   const googlePair = [env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET];
   if (googlePair.some(Boolean) && !googlePair.every(Boolean)) {
-    throw new EnvValidationError([
-      "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together",
-    ]);
+    issues.push("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together");
   }
+  // Session JWTs are encrypted with NEXTAUTH_SECRET, and middleware must be able to read
+  // them. A per-process fallback secret would silently log everyone out on every restart,
+  // so turning sign-in on without one is a configuration error.
+  if (googlePair.every(Boolean) && !env.NEXTAUTH_SECRET) {
+    issues.push("NEXTAUTH_SECRET is required when Google sign-in is configured");
+  }
+  if (issues.length > 0) throw new EnvValidationError(issues);
   return env;
+}
+
+/** Google OAuth settings, present only when sign-in is fully configured. */
+export type AuthConfig = {
+  googleClientId: string;
+  googleClientSecret: string;
+  secret: string;
+};
+
+/**
+ * Sign-in is optional so the app runs on a fresh clone. Returns `null` when Google OAuth is
+ * not configured; {@link parseServerEnv} has already rejected half-configured setups.
+ */
+export function getAuthConfig(env: ServerEnv): AuthConfig | null {
+  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, NEXTAUTH_SECRET } = env;
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !NEXTAUTH_SECRET) return null;
+  return {
+    googleClientId: GOOGLE_CLIENT_ID,
+    googleClientSecret: GOOGLE_CLIENT_SECRET,
+    secret: NEXTAUTH_SECRET,
+  };
 }
 
 let cached: ServerEnv | undefined;
