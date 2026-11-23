@@ -14,6 +14,12 @@ const serverEnvSchema = z.object({
   NEXTAUTH_SECRET: z.string().min(32, "NEXTAUTH_SECRET must be at least 32 characters").optional(),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  /** Answer feedback (roadmap item 6). Unset means the offline heuristic evaluator. */
+  LLM_PROVIDER: z.enum(["anthropic", "openai", "heuristic"]).optional(),
+  LLM_API_KEY: z.string().min(1).optional(),
+  LLM_MODEL: z.string().min(1).optional(),
+  /** Overrides the provider's API base URL (gateways, OpenAI-compatible servers). */
+  LLM_BASE_URL: z.string().url().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -56,6 +62,19 @@ export function parseServerEnv(source: Record<string, string | undefined>): Serv
   if (googlePair.every(Boolean) && !env.NEXTAUTH_SECRET) {
     issues.push("NEXTAUTH_SECRET is required when Google sign-in is configured");
   }
+  const remoteLlm = env.LLM_PROVIDER === "anthropic" || env.LLM_PROVIDER === "openai";
+  if (remoteLlm && (!env.LLM_API_KEY || !env.LLM_MODEL)) {
+    issues.push(
+      `LLM_API_KEY and LLM_MODEL are required when LLM_PROVIDER is "${env.LLM_PROVIDER}"`,
+    );
+  }
+  // A key with no provider is almost certainly a typo'd provider name; failing loudly beats
+  // silently grading with the heuristic while the operator believes an LLM is in use.
+  if (!remoteLlm && (env.LLM_API_KEY || env.LLM_MODEL || env.LLM_BASE_URL)) {
+    issues.push(
+      'LLM_API_KEY, LLM_MODEL and LLM_BASE_URL need LLM_PROVIDER "anthropic" or "openai"',
+    );
+  }
   if (issues.length > 0) throw new EnvValidationError(issues);
   return env;
 }
@@ -78,6 +97,27 @@ export function getAuthConfig(env: ServerEnv): AuthConfig | null {
     googleClientId: GOOGLE_CLIENT_ID,
     googleClientSecret: GOOGLE_CLIENT_SECRET,
     secret: NEXTAUTH_SECRET,
+  };
+}
+
+/** LLM settings for answer feedback; `null` means the offline heuristic evaluator. */
+export type LlmConfig = {
+  provider: "anthropic" | "openai";
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+};
+
+export function getLlmConfig(env: ServerEnv): LlmConfig | null {
+  const { LLM_PROVIDER, LLM_API_KEY, LLM_MODEL, LLM_BASE_URL } = env;
+  if ((LLM_PROVIDER !== "anthropic" && LLM_PROVIDER !== "openai") || !LLM_API_KEY || !LLM_MODEL) {
+    return null;
+  }
+  return {
+    provider: LLM_PROVIDER,
+    apiKey: LLM_API_KEY,
+    model: LLM_MODEL,
+    ...(LLM_BASE_URL && { baseUrl: LLM_BASE_URL }),
   };
 }
 
