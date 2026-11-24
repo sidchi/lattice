@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EnvValidationError, getAuthConfig, parseServerEnv } from "./env";
+import { EnvValidationError, getAuthConfig, getLlmConfig, parseServerEnv } from "./env";
 
 describe("parseServerEnv", () => {
   it("accepts an empty environment and defaults NODE_ENV", () => {
@@ -75,5 +75,47 @@ describe("getAuthConfig", () => {
       googleClientSecret: "client-secret",
       secret,
     });
+  });
+});
+
+describe("LLM configuration", () => {
+  const remote = { LLM_PROVIDER: "anthropic", LLM_API_KEY: "test-key", LLM_MODEL: "test-model" };
+
+  it("defaults to the heuristic evaluator", () => {
+    expect(getLlmConfig(parseServerEnv({}))).toBeNull();
+    expect(getLlmConfig(parseServerEnv({ LLM_PROVIDER: "heuristic" }))).toBeNull();
+  });
+
+  it("returns the provider settings when fully configured", () => {
+    expect(getLlmConfig(parseServerEnv(remote))).toEqual({
+      provider: "anthropic",
+      apiKey: "test-key",
+      model: "test-model",
+    });
+    const openai = parseServerEnv({
+      ...remote,
+      LLM_PROVIDER: "openai",
+      LLM_BASE_URL: "http://localhost:11434/v1",
+    });
+    expect(getLlmConfig(openai)).toMatchObject({
+      provider: "openai",
+      baseUrl: "http://localhost:11434/v1",
+    });
+  });
+
+  it.each(["LLM_API_KEY", "LLM_MODEL"])("requires %s for a remote provider", (name) => {
+    expect(() => parseServerEnv({ ...remote, [name]: "" })).toThrow(/required when LLM_PROVIDER/);
+  });
+
+  it("rejects provider settings without a remote provider", () => {
+    expect(() => parseServerEnv({ LLM_API_KEY: "test-key" })).toThrow(/need LLM_PROVIDER/);
+    expect(() => parseServerEnv({ LLM_PROVIDER: "heuristic", LLM_MODEL: "x" })).toThrow(
+      /need LLM_PROVIDER/,
+    );
+  });
+
+  it("rejects an unknown provider and a malformed base URL", () => {
+    expect(() => parseServerEnv({ ...remote, LLM_PROVIDER: "antropic" })).toThrow(/LLM_PROVIDER/);
+    expect(() => parseServerEnv({ ...remote, LLM_BASE_URL: "localhost" })).toThrow(/LLM_BASE_URL/);
   });
 });

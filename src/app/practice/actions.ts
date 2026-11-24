@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/auth";
 import { getPrisma } from "@/lib/db";
+import { getEvaluator } from "@/lib/feedback/factory";
+import { generateSessionFeedback } from "@/lib/feedback/service";
 import { practiceHref, PRACTICE_PATH } from "@/lib/practice/paths";
 import {
   answerDraftsSchema,
@@ -76,4 +78,28 @@ export async function submitPracticeAction(
     redirect(practiceHref(args[0]));
   }
   return { ok: false, error: result.error };
+}
+
+/**
+ * Generates rubric feedback for a submitted session, then reloads its review. Answers that
+ * already have feedback are skipped unless the form asks to regenerate. Failures come back
+ * as `?feedback=` codes so the page can say what happened without losing what succeeded.
+ */
+export async function requestFeedbackAction(form: FormData): Promise<void> {
+  const rawId = form.get("sessionId");
+  const user = await requireUser(practiceHref(String(rawId ?? "")));
+  const id = sessionIdSchema.safeParse(rawId);
+  if (!id.success) redirect(PRACTICE_PATH);
+  const href = practiceHref(id.data);
+
+  const result = await generateSessionFeedback(getPrisma(), user.id, id.data, getEvaluator(), {
+    regenerate: form.get("regenerate") === "true",
+  });
+  if (!result.ok) {
+    redirect(result.error === "not_found" ? PRACTICE_PATH : `${href}?feedback=${result.error}`);
+  }
+
+  const failed = result.value.filter((outcome) => outcome.status === "failed").length;
+  if (failed === 0) redirect(href);
+  redirect(`${href}?feedback=${failed === result.value.length ? "failed" : "partial"}`);
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { isProtectedPath } from "@/lib/auth/paths";
 
-import { PRACTICE_PATH, practiceHref, startErrorMessage } from "./paths";
+import { feedbackStatusMessage, PRACTICE_PATH, practiceHref, startErrorMessage } from "./paths";
 
 describe("practice paths", () => {
   it("builds session URLs under the protected /practice prefix", () => {
@@ -27,5 +27,15 @@ describe("startErrorMessage", () => {
     expect(startErrorMessage("")).toBeNull();
     expect(startErrorMessage("<script>")).toBeNull();
     expect(startErrorMessage("constructor")).toBeNull();
+  });
+});
+
+describe("feedbackStatusMessage", () => {
+  it("maps known codes and ignores everything else", () => {
+    expect(feedbackStatusMessage("partial")).toMatch(/some answers/);
+    expect(feedbackStatusMessage(["failed"])).toMatch(/Try again in a moment/);
+    expect(feedbackStatusMessage("not_submitted")).toMatch(/once the session is submitted/);
+    expect(feedbackStatusMessage(undefined)).toBeNull();
+    expect(feedbackStatusMessage("toString")).toBeNull();
   });
 });

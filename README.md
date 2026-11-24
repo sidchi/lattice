@@ -5,7 +5,7 @@
 Interview practice platform: a curated question bank, timed mock interviews, and rubric-based AI
 feedback that tracks your weak areas over time.
 
-> Status: early development (data model, Google sign-in and the question bank are in). See [ROADMAP.md](ROADMAP.md) for what is built and what is next.
+> Status: early development (data model, Google sign-in, the question bank, timed practice sessions and rubric feedback are in). See [ROADMAP.md](ROADMAP.md) for what is built and what is next.
 
 ## Why
 
@@ -17,17 +17,17 @@ scored on the same dimensions an interviewer uses, and see which dimensions keep
 
 ```
             ┌──────────────────────────── Next.js 15 (App Router) ────────────────────────────┐
- Browser ──▶│  Server Components (pages)   Route Handlers (/api/*)   Server Actions (planned) │
+ Browser ──▶│  Server Components (pages)   Route Handlers (/api/*)   Server Actions           │
             │            │                         │                        │                 │
             │            └──────────────┬──────────┴────────────────────────┘                 │
             │                    src/lib (domain logic, env validation)                       │
             └───────────────┬──────────────────────┬──────────────────────┬──────────────────┘
                             ▼                      ▼                      ▼
-                    Prisma (SQLite dev,     NextAuth (Google     LLM provider interface
-                    Postgres prod)          OAuth)               (rubric scoring, mocked in tests)
+                    Prisma (SQLite dev,     NextAuth (Google     AnswerEvaluator: LLM over
+                    Postgres prod)          OAuth)               fetch, or offline heuristic
 ```
 
-Boxes below the app are planned; the roadmap adds them one PR at a time.
+All three integrations below the app are in place; Postgres for production arrives with roadmap item 9.
 
 | Concern       | Choice                                                       |
 | ------------- | ------------------------------------------------------------ |
@@ -182,6 +182,71 @@ the session and, once it is submitted, shows a read-only review.
 Trade-off: two tabs editing the same answer are last-write-wins. An answer `version` column with
 compare-and-set would detect it; for a single-user practice tool the simpler model wins.
 
+## Answer feedback
+
+Once a session is submitted, "Get feedback" scores every answer against the rubric for its
+category and stores the result. Each answer gets a 1-5 score per dimension with a comment, a
+short summary, and an overall score.
+
+```
+ review page ──"Get feedback"──▶ requestFeedbackAction ──▶ generateSessionFeedback
+                                  (requireUser, zod)          │ submitted sessions only, owner-scoped
+                                                              │ skip answers that already have feedback
+                                                              ▼ (empty answers: fixed score, no call)
+                         AnswerEvaluator.evaluate(question, answer, rubric)   ×N in parallel
+                         ├─ LlmEvaluator ── prompt.ts ──▶ ChatModel ──▶ Anthropic Messages API
+                         │      ▲ output.ts: extract JSON,      └─────▶ OpenAI-compatible Chat API
+                         │      │ validate vs. rubric, 1 repair try      (OpenAI, Ollama, vLLM, …)
+                         └─ HeuristicEvaluator (offline default, deterministic)
+                                                              │
+                         overall = rubric-weighted mean ──▶ Feedback + FeedbackScore rows
+```
+
+| Category      | Dimensions (weight)                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------ |
+| System design | Requirements (1), Architecture (1.5), Scalability & reliability (1.5), Trade-offs (1.5), Communication (1)   |
+| Behavioral    | Situation & stakes (1), Actions (1.5), Impact (1.5), Reflection (1), Communication (1)                       |
+| Coding        | Approach (1), Correctness (2), Complexity (1), Edge cases & testing (1), Code quality (1), Communication (1) |
+
+- **The rubric is data.** `src/lib/feedback/rubric.ts` drives the prompt, the validation of the
+  evaluator's output, the overall score and the UI. Each stored feedback row records the rubric
+  version it was scored against.
+- **Provider-agnostic.** Everything depends on `AnswerEvaluator`. The LLM evaluator talks to a
+  two-method `ChatModel`, and each provider adapter is a small function over `fetch`, so there are
+  no vendor SDKs. Configure with `LLM_PROVIDER` (`anthropic` or `openai`), `LLM_API_KEY`,
+  `LLM_MODEL` and optionally `LLM_BASE_URL`, which points `openai` at any compatible server such as
+  a local Ollama. With nothing set, the offline heuristic runs, so a fresh clone works end to end.
+  The UI labels heuristic scores as keyword coverage, not a real review.
+- **Model output is untrusted input.** Replies are parsed out of fences or prose, then
+  schema-checked: every dimension exactly once, nothing extra, integer scores within 1-5. On a
+  violation the model gets one repair turn that shows its own reply and the exact problem. The
+  overall score is computed by Lattice, never by the model, so it is reproducible from the stored
+  dimension scores.
+- **Prompt injection is contained, not ignored.** The answer is fenced in tags (tag-like text inside
+  it is neutralized) and the system prompt says to treat it as data. The worst a successful injection
+  can do is inflate the scores on the attacker's own answer, which only that user sees.
+- **Resilient transport.** Per-request timeout, bounded retries with jittered exponential backoff
+  for 429/5xx and network errors (honoring `Retry-After`), no retries on 4xx or after the caller
+  cancels, and an overall per-answer budget.
+- **Idempotent, partial, race-safe.** Answers that already have feedback are skipped unless the user
+  regenerates. One failed answer doesn't discard the others, and a retry only re-evaluates the
+  failures. A failed regenerate keeps the previous feedback. If two requests race, the unique
+  `Feedback.answerId` decides: one insert wins and the other reports `skipped`.
+
+Trade-offs worth discussing:
+
+- **Synchronous evaluation.** The request waits for the model (seconds per answer, in parallel,
+  at most three answers). That keeps the architecture to one process and no queue. At real scale
+  this becomes a job queue with status polling or streaming, and the idempotent, per-answer
+  service is already the shape a worker needs.
+- **Racing duplicate requests can both pay for a model call** even though only one result is
+  stored. A short-lived "evaluating" lease per answer would prevent that; for one user clicking a
+  button, the unique constraint is enough.
+- **Regenerate is not rate-limited** yet. With a paid provider, a per-user budget belongs in front
+  of it before a public launch (roadmap item 9).
+- **Scores from different evaluators aren't comparable.** The evaluator id and rubric version are
+  stored with every row so item 7's progress charts can filter or group by them.
+
 ## Authentication
 
 ```
@@ -219,9 +284,11 @@ src/
   app/            routes (pages, layouts, route handlers) with colocated tests
   auth.ts         server-side session helpers: getCurrentUser(), requireUser()
   middleware.ts   early redirect for protected routes
-  components/     shared UI (auth buttons, question badges, filters, pagination, practice runner)
+  components/     shared UI (auth buttons, question badges, filters, pagination, practice runner,
+                  feedback panel)
   lib/            framework-agnostic logic: env validation, auth rules, Prisma client, seed,
-                  question bank filters and read model, practice session lifecycle and timer
+                  question bank filters and read model, practice session lifecycle and timer,
+                  feedback (rubric, evaluators, LLM providers, output validation)
   types/          module augmentation (NextAuth session shape)
   generated/      Prisma client (generated on install, git-ignored)
   test/           Vitest setup and a throwaway-SQLite helper for database tests

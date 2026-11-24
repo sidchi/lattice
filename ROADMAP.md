@@ -7,7 +7,7 @@ Interview practice platform built from scratch (Next.js 15 App Router, TypeScrip
 - [x] 3. Auth: NextAuth with Google OAuth, protected routes, session handling, tests with a mocked provider
 - [x] 4. Question bank: browse and filter by category, difficulty and company; question detail page
 - [x] 5. Practice session: timed mock interview flow, answer editor, save progress, submit
-- [ ] 6. AI feedback: provider-agnostic LLM interface that scores answers against a rubric (mocked in tests)
+- [x] 6. AI feedback: provider-agnostic LLM interface that scores answers against a rubric (mocked in tests)
 - [ ] 7. History and progress: past sessions, scores over time, weak-area summary
 - [ ] 8. E2E tests (Playwright) for sign-in, practice flow and results; accessibility pass
 - [ ] 9. Production: Postgres via Prisma, Vercel deploy config, demo mode without sign-in

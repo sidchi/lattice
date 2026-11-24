@@ -136,14 +136,18 @@ model Answer {
 /// Rubric-based evaluation of one answer (roadmap item 6). One per answer; regenerating
 /// feedback replaces it.
 model Feedback {
-  id           String   @id @default(cuid())
-  answerId     String   @unique
-  /// Overall score on a 1-5 scale.
-  overallScore Int
-  summary      String
-  /// Identifier of the evaluator that produced this feedback (model name or "mock").
-  evaluator    String
-  createdAt    DateTime @default(now())
+  id            String   @id @default(cuid())
+  answerId      String   @unique
+  /// Overall score on a 1-5 scale: the rubric-weighted mean of the dimension scores.
+  overallScore  Int
+  summary       String
+  /// Identifier of the evaluator that produced this feedback ("anthropic:<model>",
+  /// "openai:<model>", "heuristic-v1", or "empty-answer").
+  evaluator     String
+  /// Version of the category rubric the scores were given against (src/lib/feedback/rubric.ts),
+  /// so scores from before a rubric change can be told apart.
+  rubricVersion Int      @default(1)
+  createdAt     DateTime @default(now())
 
   answer Answer          @relation(fields: [answerId], references: [id], onDelete: Cascade)
   scores FeedbackScore[]

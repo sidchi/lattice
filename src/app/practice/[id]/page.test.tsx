@@ -4,14 +4,20 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 import { requireUser } from "@/auth";
 import { getPrisma } from "@/lib/db";
+import { generateSessionFeedback } from "@/lib/feedback/service";
 import { saveProgress, startSession, submitSession } from "@/lib/practice/service";
 import { seedQuestionBank } from "@/lib/seed/seed";
 import { createTestDatabase, type TestDatabase } from "@/test/db";
+import { evaluationFor } from "@/test/feedback";
 
 import PracticeSessionPage from "./page";
 
 vi.mock("@/auth", () => ({ requireUser: vi.fn() }));
-vi.mock("../actions", () => ({ savePracticeAction: vi.fn(), submitPracticeAction: vi.fn() }));
+vi.mock("../actions", () => ({
+  savePracticeAction: vi.fn(),
+  submitPracticeAction: vi.fn(),
+  requestFeedbackAction: vi.fn(),
+}));
 vi.mock(import("@/lib/db"), async (importOriginal) => ({
   ...(await importOriginal()),
   getPrisma: vi.fn(),
@@ -56,7 +62,15 @@ async function newSession(now?: Date): Promise<string> {
   return result.value.id;
 }
 
-const page = (id: string) => PracticeSessionPage({ params: Promise.resolve({ id }) });
+const page = (id: string, query: Record<string, string> = {}) =>
+  PracticeSessionPage({ params: Promise.resolve({ id }), searchParams: Promise.resolve(query) });
+
+async function submittedSession(content = "Sliding window counters"): Promise<string> {
+  const id = await newSession();
+  const answer = await db.prisma.answer.findFirstOrThrow({ where: { sessionId: id } });
+  await submitSession(db.prisma, userId, id, [{ answerId: answer.id, content, timeSpentSec: 60 }]);
+  return id;
+}
 
 describe("PracticeSessionPage", () => {
   it("renders the timed runner for an in-progress session", async () => {
@@ -109,5 +123,43 @@ describe("PracticeSessionPage", () => {
     });
     await expect(page(id)).rejects.toThrow("NEXT_NOT_FOUND");
     expect(notFound).toHaveBeenCalled();
+  });
+
+  it("offers feedback for a submitted session that has none yet", async () => {
+    const id = await submittedSession();
+    render(await page(id));
+
+    expect(screen.getByRole("button", { name: "Get feedback" })).toBeVisible();
+    expect(screen.getByText("No feedback yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Feedback" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows stored feedback and offers to regenerate it", async () => {
+    const id = await submittedSession();
+    await generateSessionFeedback(db.prisma, userId, id, {
+      id: "anthropic:test-model",
+      evaluate: async (input) => evaluationFor(input.question.category, 4, "Good structure."),
+    });
+    render(await page(id));
+
+    const panel = screen.getByRole("region", { name: "Feedback" });
+    expect(panel).toHaveTextContent("Overall 4/5");
+    expect(panel).toHaveTextContent("Good structure.");
+    expect(panel).toHaveTextContent("Anthropic · test-model");
+    expect(screen.getByRole("button", { name: "Regenerate feedback" })).toBeVisible();
+    expect(screen.queryByText("No feedback yet.")).not.toBeInTheDocument();
+  });
+
+  it("explains a failed feedback request", async () => {
+    const id = await submittedSession();
+    render(await page(id, { feedback: "failed" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("couldn't be generated");
+  });
+
+  it("ignores unknown feedback codes", async () => {
+    const id = await submittedSession();
+    render(await page(id, { feedback: "<script>" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
