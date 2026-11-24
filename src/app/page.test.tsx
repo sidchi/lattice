@@ -17,7 +17,7 @@ describe("HomePage", () => {
     render(<HomePage />);
     expect(screen.getByRole("link", { name: "Start practicing" })).toHaveAttribute(
       "href",
-      "/dashboard",
+      "/practice",
     );
   });
 

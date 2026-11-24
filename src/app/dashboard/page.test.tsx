@@ -23,7 +23,11 @@ describe("DashboardPage", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Welcome, Ada Lovelace");
     expect(screen.getByText("Signed in as ada@example.com")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "browse the question bank" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Start practicing" })).toHaveAttribute(
+      "href",
+      "/practice",
+    );
+    expect(screen.getByRole("link", { name: "Browse the question bank" })).toHaveAttribute(
       "href",
       "/questions",
     );

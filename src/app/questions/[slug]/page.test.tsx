@@ -13,6 +13,7 @@ vi.mock(import("@/lib/db"), async (importOriginal) => ({
   ...(await importOriginal()),
   getPrisma: vi.fn(),
 }));
+vi.mock("@/app/practice/actions", () => ({ startPracticeAction: vi.fn() }));
 vi.mock("next/navigation", () => ({
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
@@ -55,6 +56,14 @@ describe("QuestionPage", () => {
       "href",
       "/questions",
     );
+  });
+
+  it("offers to practice the question", async () => {
+    const { container } = render(await QuestionPage(params("design-rate-limiter")));
+
+    expect(screen.getByRole("button", { name: "Practice this question" })).toBeInTheDocument();
+    expect(container.querySelector('input[name="mode"]')).toHaveValue("question");
+    expect(container.querySelector('input[name="question"]')).toHaveValue("design-rate-limiter");
   });
 
   it("calls notFound() for an unknown slug", async () => {

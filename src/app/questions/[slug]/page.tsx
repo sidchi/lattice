@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 
 import { QuestionBadges } from "@/components/questions/question-badges";
+import { startPracticeAction } from "@/app/practice/actions";
 import { getPrisma } from "@/lib/db";
 import { categoryLabel, formatTimeLimit, questionsHref } from "@/lib/questions/filters";
 import { getQuestionBySlug } from "@/lib/questions/repository";
@@ -75,10 +76,19 @@ export default async function QuestionPage({ params }: { params: Promise<Params>
           <p>
             <strong>Suggested time box: {formatTimeLimit(question.timeLimitSec)}.</strong>{" "}
             <span className="text-muted">
-              Answer out loud or in writing before you look anything up. Timed practice sessions
-              with saved answers are coming next.
+              Answer out loud or in writing before you look anything up.
             </span>
           </p>
+          <form action={startPracticeAction} className="mt-3">
+            <input type="hidden" name="mode" value="question" />
+            <input type="hidden" name="question" value={question.slug} />
+            <button
+              type="submit"
+              className="bg-accent text-background rounded-md px-4 py-2 text-sm font-semibold"
+            >
+              Practice this question
+            </button>
+          </form>
         </aside>
       </article>
     </main>
