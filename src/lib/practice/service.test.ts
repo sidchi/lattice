@@ -7,6 +7,7 @@ import type { SeedData } from "@/lib/seed/schema";
 import { createTestDatabase, type TestDatabase } from "@/test/db";
 
 import {
+  finalizeExpiredSessions,
   getSession,
   listSessions,
   saveProgress,
@@ -408,5 +409,33 @@ describe("listSessions", () => {
       submittedAt: null,
     });
     expect(await listSessions(db.prisma, alice, { limit: 1 })).toHaveLength(1);
+  });
+});
+
+describe("finalizeExpiredSessions", () => {
+  it("submits every expired session at its own deadline and leaves the rest alone", async () => {
+    const twoSum = (await startOne("two-sum")).id; // 20 min box
+    const cache = (await startOne("design-cache")).id; // 40 min box
+    const submitted = (await startOne("lru")).id;
+    unwrap(await submitSession(db.prisma, alice, submitted, [], at(60)));
+    await startSession(db.prisma, bob, { mode: "question", question: "two-sum" }, at(0));
+
+    // Past the two-sum grace period, inside the design-cache time box.
+    expect(await finalizeExpiredSessions(db.prisma, alice, at(25 * MIN))).toBe(1);
+
+    const rows = await db.prisma.practiceSession.findMany({
+      select: { id: true, userId: true, status: true, submittedAt: true },
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get(twoSum)).toMatchObject({
+      status: PracticeSessionStatus.SUBMITTED,
+      submittedAt: new Date(T0.getTime() + 20 * MIN * 1000),
+    });
+    expect(byId.get(cache)?.status).toBe(PracticeSessionStatus.IN_PROGRESS);
+    expect(byId.get(submitted)?.submittedAt).toEqual(at(60).now);
+    // Another user's expired session is theirs to finalize.
+    expect(rows.find((row) => row.userId === bob)?.status).toBe(PracticeSessionStatus.IN_PROGRESS);
+
+    expect(await finalizeExpiredSessions(db.prisma, alice, at(25 * MIN))).toBe(0);
   });
 });

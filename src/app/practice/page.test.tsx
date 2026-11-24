@@ -53,6 +53,10 @@ describe("PracticePage", () => {
     expect(within(screen.getByLabelText("Questions")).getAllByRole("option")).toHaveLength(3);
     expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
     expect(screen.getByText("No sessions yet.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "History & progress →" })).toHaveAttribute(
+      "href",
+      "/history",
+    );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

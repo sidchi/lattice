@@ -308,6 +308,39 @@ export async function submitSession(
   });
 }
 
+/**
+ * Applies lazy expiry to every one of the user's sessions at once: each in-progress session
+ * whose grace period has passed is submitted at its deadline, exactly as `getSession` would
+ * do on open. Aggregate reads (history, progress) call this first so a session abandoned in
+ * a closed tab counts as submitted without having to be opened. Returns how many sessions
+ * were finalized.
+ */
+export async function finalizeExpiredSessions(
+  prisma: PrismaClient,
+  userId: string,
+  { now = new Date() }: Clock = {},
+): Promise<number> {
+  const open = await prisma.practiceSession.findMany({
+    where: { userId, status: PracticeSessionStatus.IN_PROGRESS },
+    select: { id: true, startedAt: true, timeLimitSec: true },
+  });
+  const expired = open
+    .map((session) => ({
+      id: session.id,
+      deadline: sessionDeadline(session.startedAt, session.timeLimitSec),
+    }))
+    .filter((session) => isPastGrace(session.deadline, now));
+  if (expired.length === 0) return 0;
+
+  // Each finalize is its own conditional update, so a concurrent submit simply wins.
+  const results = await prisma.$transaction(async (tx) => {
+    const flipped: boolean[] = [];
+    for (const session of expired) flipped.push(await finalize(tx, session.id, session.deadline));
+    return flipped;
+  });
+  return results.filter(Boolean).length;
+}
+
 /** The user's sessions, newest first, for the practice landing page. */
 export async function listSessions(
   prisma: PrismaClient,

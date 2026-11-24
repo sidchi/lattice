@@ -4,6 +4,7 @@ import { QuestionCategory } from "@/generated/prisma/enums";
 
 import {
   dimensionLabel,
+  findDimension,
   MAX_SCORE,
   MIN_SCORE,
   overallScore,
@@ -87,5 +88,26 @@ describe("dimensionLabel", () => {
   it("labels known keys and falls back to the key for retired ones", () => {
     expect(dimensionLabel("edge_cases")).toBe("Edge cases & testing");
     expect(dimensionLabel("retired_dimension")).toBe("retired_dimension");
+  });
+});
+
+describe("findDimension", () => {
+  it("finds a category-specific dimension with its single category", () => {
+    expect(findDimension("tradeoffs")).toEqual({
+      dimension: expect.objectContaining({ key: "tradeoffs", label: "Trade-offs" }),
+      categories: ["SYSTEM_DESIGN"],
+    });
+  });
+
+  it("reports every category for a shared dimension", () => {
+    expect(findDimension("communication")?.categories.sort()).toEqual([
+      "BEHAVIORAL",
+      "CODING",
+      "SYSTEM_DESIGN",
+    ]);
+  });
+
+  it("returns null for retired keys", () => {
+    expect(findDimension("retired_dimension")).toBeNull();
   });
 });

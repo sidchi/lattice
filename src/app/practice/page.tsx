@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { requireUser } from "@/auth";
 import { getPrisma } from "@/lib/db";
+import { HISTORY_PATH } from "@/lib/history/paths";
 import { MAX_QUESTIONS } from "@/lib/practice/limits";
 import { PRACTICE_PATH, practiceHref, startErrorMessage } from "@/lib/practice/paths";
 import { listSessions } from "@/lib/practice/service";
@@ -109,9 +110,17 @@ export default async function PracticePage({
       </section>
 
       <section aria-labelledby="recent-heading" className="flex flex-col gap-4">
-        <h2 id="recent-heading" className="text-xl font-semibold">
-          Recent sessions
-        </h2>
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 id="recent-heading" className="text-xl font-semibold">
+            Recent sessions
+          </h2>
+          <Link
+            href={HISTORY_PATH}
+            className="text-accent text-sm underline-offset-4 hover:underline"
+          >
+            History & progress →
+          </Link>
+        </div>
         {sessions.length === 0 ? (
           <p className="text-muted">No sessions yet.</p>
         ) : (
