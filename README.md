@@ -245,7 +245,59 @@ Trade-offs worth discussing:
 - **Regenerate is not rate-limited** yet. With a paid provider, a per-user budget belongs in front
   of it before a public launch (roadmap item 9).
 - **Scores from different evaluators aren't comparable.** The evaluator id and rubric version are
-  stored with every row so item 7's progress charts can filter or group by them.
+  stored with every row, and `/history` can narrow progress to one evaluator.
+
+## History and progress
+
+`/history` shows what you have practiced and where to focus next: headline numbers, average
+score per session over time, the rubric dimensions that most need work, a per-category
+breakdown, and every submitted session (paged, newest first). The dashboard shows a snapshot.
+
+```
+ /history ──▶ requireUser ──▶ getProgressSummary ─┬─ finalizeExpiredSessions (lazy expiry, all at once)
+                                                  ├─ count / SUM(timeSpentSec) over SUBMITTED sessions
+                                                  ├─ Feedback rows ──▶ progress.ts: per-session means,
+                                                  │                    recent trend, per-category means
+                                                  └─ FeedbackScore GROUP BY dimension ──▶ weak areas
+              ──▶ listSessionHistory (OFFSET paging)
+              ──▶ ScoreTrendChart: server-rendered SVG + table fallback, no chart library
+```
+
+- **Weak areas are a GROUP BY.** Dimension scores are rows (not JSON), so "weakest dimensions"
+  is `AVG(score) … GROUP BY dimension` in the database. Shared dimensions such as
+  Communication pool across categories. An area needs at least 2 scores and an average below 4
+  to be called weak, so one bad answer is not a pattern and a strong candidate isn't told to fix
+  their best dimension. Each area links to practice questions in its category.
+- **Like with like.** The offline heuristic and an LLM grade on different curves. When a user's
+  scores come from more than one evaluator, a "Scored by" filter (`?scoredBy=`) narrows every
+  number to one. Empty-answer scores count under every evaluator, since not answering is a 1
+  whoever grades. The filter value must be an evaluator the user actually has scores from.
+- **Honest chart.** The y axis is always the full 1-5 scale, so a move from 3.0 to 3.2 doesn't
+  look like a cliff. The x axis is session order rather than calendar time: progress is per
+  attempt, and even spacing keeps every point hoverable. Each point has a tooltip, and the same
+  numbers are available as a table. The trend line compares your last sessions (up to 5) with
+  the same number before them, shrinking the window for newer users.
+- **History doesn't depend on opening a session.** Expiry is lazy (see Practice sessions), so a
+  session abandoned in a closed tab is still `IN_PROGRESS` in the database. History applies the
+  same rule to all of a user's sessions before reading, so it counts as submitted at its
+  deadline.
+- **Pure core, real database in tests.** The maths (`src/lib/history/progress.ts`) and chart
+  geometry (`chart.ts`) are pure functions with unit tests; the service and page are tested
+  against a throwaway SQLite database with the real seed.
+
+Trade-offs worth discussing:
+
+- **Read-time aggregation.** Every visit recomputes from `Feedback` rows. That is a handful of
+  indexed queries for a person's practice history (hundreds of rows), and it can never drift
+  from the source data. At much larger scale, a per-user rollup table updated when feedback is
+  written would make reads O(1), at the cost of keeping two copies consistent.
+- **Unweighted means.** A session's score is the mean of its answers' overall scores, and a
+  weak area is the plain mean of its dimension scores. Recency weighting (e.g. an exponential
+  moving average) would react faster to improvement; the plain mean is easier to explain and
+  verify by hand, and the separate recent-trend comparison covers "am I improving?".
+- **Rubric versions are not filtered.** Every rubric is still version 1. When one changes, the
+  stored `rubricVersion` lets progress split or filter by version the same way it does by
+  evaluator.
 
 ## Authentication
 
@@ -285,10 +337,11 @@ src/
   auth.ts         server-side session helpers: getCurrentUser(), requireUser()
   middleware.ts   early redirect for protected routes
   components/     shared UI (auth buttons, question badges, filters, pagination, practice runner,
-                  feedback panel)
+                  feedback panel, score trend chart)
   lib/            framework-agnostic logic: env validation, auth rules, Prisma client, seed,
                   question bank filters and read model, practice session lifecycle and timer,
-                  feedback (rubric, evaluators, LLM providers, output validation)
+                  feedback (rubric, evaluators, LLM providers, output validation), history and
+                  progress (aggregation, chart geometry)
   types/          module augmentation (NextAuth session shape)
   generated/      Prisma client (generated on install, git-ignored)
   test/           Vitest setup and a throwaway-SQLite helper for database tests
