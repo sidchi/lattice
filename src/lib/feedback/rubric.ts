@@ -174,6 +174,25 @@ export function dimensionLabel(key: string): string {
 }
 
 /**
+ * Looks up a stored dimension key in the current rubrics. A key can belong to several
+ * categories (`communication` is shared by all three). Returns null for retired dimensions.
+ */
+export function findDimension(
+  key: string,
+): { dimension: RubricDimension; categories: QuestionCategory[] } | null {
+  let found: RubricDimension | undefined;
+  const categories: QuestionCategory[] = [];
+  for (const rubric of Object.values(RUBRICS)) {
+    const dimension = rubric.dimensions.find((candidate) => candidate.key === key);
+    if (dimension) {
+      found ??= dimension;
+      categories.push(rubric.category);
+    }
+  }
+  return found ? { dimension: found, categories } : null;
+}
+
+/**
  * Weighted mean of the dimension scores, rounded half up to the nearest integer and clamped
  * to the scale. Computed here rather than asked of the evaluator: models are unreliable at
  * arithmetic, and the overall score must be reproducible from the stored dimension scores.
