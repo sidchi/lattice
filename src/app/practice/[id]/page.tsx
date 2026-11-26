@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/auth";
 import { FeedbackForm } from "@/components/feedback/feedback-form";
 import { FeedbackPanel } from "@/components/feedback/feedback-panel";
+import { MAIN_CONTENT_ID } from "@/components/layout/skip-link";
 import { PracticeRunner } from "@/components/practice/practice-runner";
 import { QuestionBadges } from "@/components/questions/question-badges";
 import { getPrisma } from "@/lib/db";
@@ -43,7 +44,11 @@ export default async function PracticeSessionPage({
 
   if (session.status === "IN_PROGRESS") {
     return (
-      <main className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-10 sm:px-6">
+      <main
+        id={MAIN_CONTENT_ID}
+        tabIndex={-1}
+        className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-10 focus:outline-none sm:px-6"
+      >
         <header className="flex flex-col gap-1">
           <h1 className="text-2xl font-bold tracking-tight">Mock interview</h1>
           <p className="text-muted text-sm">
@@ -69,7 +74,11 @@ export default async function PracticeSessionPage({
   const status = feedbackStatusMessage(query.feedback);
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-12 sm:px-6">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-12 focus:outline-none sm:px-6"
+    >
       <header className="flex flex-col gap-2">
         <Link
           href={PRACTICE_PATH}

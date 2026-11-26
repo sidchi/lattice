@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { getCurrentUser, isAuthEnabled } from "@/auth";
 import { GoogleSignInButton } from "@/components/auth/auth-buttons";
+import { MAIN_CONTENT_ID } from "@/components/layout/skip-link";
 import { signInErrorMessage } from "@/lib/auth/errors";
 import { safeCallbackUrl } from "@/lib/auth/paths";
 import { site } from "@/lib/site";
@@ -26,7 +27,11 @@ export default async function SignInPage({
   const error = signInErrorMessage(params.error);
 
   return (
-    <main className="mx-auto flex max-w-md flex-col gap-8 px-4 py-16 sm:py-24">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="mx-auto flex max-w-md flex-col gap-8 px-4 py-16 focus:outline-none sm:py-24"
+    >
       <header className="flex flex-col gap-2">
         <Link href="/" className="text-accent text-sm font-semibold tracking-wide uppercase">
           {site.name}

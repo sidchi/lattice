@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { requireUser } from "@/auth";
+import { MAIN_CONTENT_ID } from "@/components/layout/skip-link";
 import { getPrisma } from "@/lib/db";
 import { HISTORY_PATH } from "@/lib/history/paths";
 import { MAX_QUESTIONS } from "@/lib/practice/limits";
@@ -35,7 +36,11 @@ export default async function PracticePage({
   const now = new Date();
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-10 px-4 py-12 sm:px-6 sm:py-16">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="mx-auto flex max-w-3xl flex-col gap-10 px-4 py-12 focus:outline-none sm:px-6 sm:py-16"
+    >
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">Practice</h1>
         <p className="text-muted">

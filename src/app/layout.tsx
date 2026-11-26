@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { SkipLink } from "@/components/layout/skip-link";
 import { site } from "@/lib/site";
 
 import "./globals.css";
@@ -12,7 +13,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className="min-h-dvh antialiased">{children}</body>
+      <body className="min-h-dvh antialiased">
+        <SkipLink />
+        {children}
+      </body>
     </html>
   );
 }

@@ -5,6 +5,7 @@ import { cache } from "react";
 
 import { QuestionBadges } from "@/components/questions/question-badges";
 import { startPracticeAction } from "@/app/practice/actions";
+import { MAIN_CONTENT_ID } from "@/components/layout/skip-link";
 import { getPrisma } from "@/lib/db";
 import { categoryLabel, formatTimeLimit, questionsHref } from "@/lib/questions/filters";
 import { getQuestionBySlug } from "@/lib/questions/repository";
@@ -28,7 +29,11 @@ export default async function QuestionPage({ params }: { params: Promise<Params>
   if (!question) notFound();
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-12 sm:px-6 sm:py-16">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-12 focus:outline-none sm:px-6 sm:py-16"
+    >
       <nav aria-label="Breadcrumb">
         <Link href="/questions" className="text-accent text-sm underline-offset-4 hover:underline">
           ← Question bank

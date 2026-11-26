@@ -1,10 +1,15 @@
 import Link from "next/link";
 
+import { MAIN_CONTENT_ID } from "@/components/layout/skip-link";
 import { practiceTracks, site } from "@/lib/site";
 
 export default function HomePage() {
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-12 px-4 py-16 sm:px-6 sm:py-24">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="mx-auto flex max-w-3xl flex-col gap-12 px-4 py-16 focus:outline-none sm:px-6 sm:py-24"
+    >
       <header className="flex flex-col gap-4">
         <p className="text-accent text-sm font-semibold tracking-wide uppercase">{site.name}</p>
         <h1 className="text-4xl font-bold tracking-tight text-balance sm:text-5xl">
