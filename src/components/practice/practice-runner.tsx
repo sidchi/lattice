@@ -95,6 +95,12 @@ export function PracticeRunner({
   const inFlightRef = useRef(false);
   const finishedRef = useRef(false);
 
+  // Focus follows the submit confirmation: "Yes, submit" when it opens, back to "Submit" when
+  // it is dismissed. Only after a user toggle, so loading the page never steals focus.
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const moveFocusRef = useRef(false);
+
   /**
    * Credits the wall-clock time since the last call to the question on screen. Measured, not
    * counted in ticks: background tabs throttle timers to once a minute or less.
@@ -192,6 +198,17 @@ export function PracticeRunner({
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
+
+  useEffect(() => {
+    if (!moveFocusRef.current) return;
+    moveFocusRef.current = false;
+    (confirming ? confirmButtonRef : submitButtonRef).current?.focus();
+  }, [confirming]);
+
+  const toggleConfirm = (open: boolean) => {
+    moveFocusRef.current = true;
+    setConfirming(open);
+  };
 
   const select = (index: number) => {
     if (index === active) return;
@@ -297,31 +314,41 @@ export function PracticeRunner({
           Save now
         </button>
         {confirming ? (
-          <>
-            <span className="text-sm">
+          <div
+            role="group"
+            aria-labelledby="confirm-submit-text"
+            className="flex flex-wrap items-center gap-3"
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && !submitting) toggleConfirm(false);
+            }}
+          >
+            <span id="confirm-submit-text" className="text-sm">
               Submit all answers? You can&apos;t edit them afterwards.
             </span>
             <button
+              ref={confirmButtonRef}
               type="button"
               onClick={() => void finish()}
               disabled={submitting}
+              aria-describedby="confirm-submit-text"
               className="bg-accent text-background rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
             >
               {submitting ? "Submitting…" : "Yes, submit"}
             </button>
             <button
               type="button"
-              onClick={() => setConfirming(false)}
+              onClick={() => toggleConfirm(false)}
               disabled={submitting}
               className="text-sm underline underline-offset-4"
             >
               Keep working
             </button>
-          </>
+          </div>
         ) : (
           <button
+            ref={submitButtonRef}
             type="button"
-            onClick={() => setConfirming(true)}
+            onClick={() => toggleConfirm(true)}
             disabled={locked}
             className="bg-accent text-background rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-60"
           >

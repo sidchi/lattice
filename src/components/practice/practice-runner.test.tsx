@@ -202,6 +202,26 @@ describe("PracticeRunner", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/no longer exists/);
   });
 
+  it("moves focus into the confirmation and back, and Escape dismisses it", () => {
+    const { submit } = setup();
+    expect(document.body).toHaveFocus(); // Rendering never steals focus.
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    const confirm = screen.getByRole("button", { name: "Yes, submit" });
+    expect(confirm).toHaveFocus();
+    expect(confirm).toHaveAccessibleDescription(/can't edit them afterwards/);
+    expect(screen.getByRole("group", { name: /Submit all answers\?/ })).toContainElement(confirm);
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep working" }));
+    expect(screen.getByRole("button", { name: "Submit" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Yes, submit" }), { key: "Escape" });
+    expect(screen.queryByRole("button", { name: "Yes, submit" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Submit" })).toHaveFocus();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it("submits automatically when time runs out and locks the editor", async () => {
     const { submit } = setup({ timeLimitSec: 300, answers: [twoQuestions[0]!] });
     // A single question: no question navigation.
