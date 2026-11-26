@@ -16,6 +16,9 @@ const eslintConfig = [
       "coverage/**",
       "next-env.d.ts",
       "src/generated/**",
+      "e2e/.state/**",
+      "e2e/.results/**",
+      "e2e/.report/**",
     ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
@@ -24,6 +27,11 @@ const eslintConfig = [
       "@typescript-eslint/consistent-type-imports": "error",
       "no-console": ["warn", { allow: ["warn", "error"] }],
     },
+  },
+  {
+    // Playwright fixtures call a parameter named `use`, which is not React's `use` hook.
+    files: ["e2e/**/*.ts", "playwright.config.ts"],
+    rules: { "react-hooks/rules-of-hooks": "off" },
   },
   // Must stay last: turns off stylistic rules that Prettier owns.
   prettier,
