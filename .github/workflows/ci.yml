@@ -73,4 +73,6 @@ jobs:
             e2e/.report
             e2e/.results
           retention-days: 14
+          # The report folders are dot-directories, which upload-artifact skips by default.
+          include-hidden-files: true
           if-no-files-found: ignore
