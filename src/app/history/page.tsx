@@ -4,6 +4,7 @@ import Link from "next/link";
 import { requireUser } from "@/auth";
 import { evaluatorLabel } from "@/components/feedback/feedback-panel";
 import { ScoreTrendChart } from "@/components/history/score-trend-chart";
+import { MAIN_CONTENT_ID } from "@/components/layout/skip-link";
 import { getPrisma } from "@/lib/db";
 import { HEURISTIC_EVALUATOR_ID } from "@/lib/feedback/heuristic";
 import { MAX_SCORE } from "@/lib/feedback/rubric";
@@ -104,7 +105,11 @@ export default async function HistoryPage({
 
   if (summary.sessionsCompleted === 0) {
     return (
-      <main className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-12 sm:px-6 sm:py-16">
+      <main
+        id={MAIN_CONTENT_ID}
+        tabIndex={-1}
+        className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-12 focus:outline-none sm:px-6 sm:py-16"
+      >
         {header}
         <section className="border-border flex flex-col items-start gap-4 rounded-lg border p-6">
           <p className="text-muted">
@@ -123,7 +128,11 @@ export default async function HistoryPage({
   const mixedEvaluators = !evaluator && summary.evaluators.length > 1;
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-10 px-4 py-12 sm:px-6 sm:py-16">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="mx-auto flex max-w-3xl flex-col gap-10 px-4 py-12 focus:outline-none sm:px-6 sm:py-16"
+    >
       {header}
 
       <section aria-labelledby="summary-heading" className="flex flex-col gap-4">

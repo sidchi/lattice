@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { requireUser } from "@/auth";
 import { SignOutButton } from "@/components/auth/auth-buttons";
+import { MAIN_CONTENT_ID } from "@/components/layout/skip-link";
 import { getPrisma } from "@/lib/db";
 import { MAX_SCORE } from "@/lib/feedback/rubric";
 import { HISTORY_PATH } from "@/lib/history/paths";
@@ -18,7 +19,11 @@ export default async function DashboardPage() {
   const focus = progress.weakAreas[0];
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-16 sm:px-6">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-16 focus:outline-none sm:px-6"
+    >
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Welcome, {displayName}</h1>

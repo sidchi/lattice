@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { MAIN_CONTENT_ID } from "@/components/layout/skip-link";
 import { Pagination } from "@/components/questions/pagination";
 import { QuestionBadges } from "@/components/questions/question-badges";
 import { QuestionFilterForm } from "@/components/questions/question-filter-form";
@@ -46,7 +47,11 @@ export default async function QuestionsPage({
   const first = (result.page - 1) * PAGE_SIZE + 1;
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-8 px-4 py-12 sm:px-6 sm:py-16">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="mx-auto flex max-w-4xl flex-col gap-8 px-4 py-12 focus:outline-none sm:px-6 sm:py-16"
+    >
       <header className="flex flex-col gap-2">
         <Link href="/" className="text-accent text-sm font-semibold tracking-wide uppercase">
           {site.name}

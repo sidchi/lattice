@@ -5,7 +5,7 @@
 Interview practice platform: a curated question bank, timed mock interviews, and rubric-based AI
 feedback that tracks your weak areas over time.
 
-> Status: early development (data model, Google sign-in, the question bank, timed practice sessions and rubric feedback are in). See [ROADMAP.md](ROADMAP.md) for what is built and what is next.
+> Status: early development (data model, Google sign-in, the question bank, timed practice sessions, rubric feedback, history, and end-to-end and accessibility tests are in). See [ROADMAP.md](ROADMAP.md) for what is built and what is next.
 
 ## Why
 
@@ -36,9 +36,9 @@ All three integrations below the app are in place; Postgres for production arriv
 | Config        | `zod`-validated environment (`src/lib/env.ts`)               |
 | Data          | Prisma 7 (driver adapters, no query engine), SQLite in dev   |
 | Auth          | NextAuth v4, Google OAuth, encrypted JWT session cookies     |
-| Testing       | Vitest + Testing Library (jsdom), v8 coverage                |
+| Testing       | Vitest + Testing Library (jsdom), Playwright + axe-core E2E  |
 | Quality gates | ESLint (`next/core-web-vitals`, `next/typescript`), Prettier |
-| CI            | GitHub Actions: lint → format → type-check → test → build    |
+| CI            | GitHub Actions: lint → format → types → test → build; E2E    |
 
 ## Getting started
 
@@ -77,7 +77,10 @@ secret) at startup rather than at the first sign-in.
 | `npm run format[:check]` | Prettier (write / verify)                            |
 | `npm run typecheck`      | `tsc --noEmit`                                       |
 | `npm test`               | Unit tests (`npm run test:coverage` for v8 coverage) |
-| `npm run check`          | Everything CI runs except the build                  |
+| `npm run check`          | Everything CI runs except the build and E2E          |
+| `npm run e2e`            | Playwright end-to-end + accessibility suite          |
+| `npm run e2e:prepare`    | Rebuild the E2E database (the suite runs it itself)  |
+| `npm run e2e:report`     | Open the last E2E HTML report                        |
 | `npm run db:migrate`     | Create a migration after editing the Prisma schema   |
 | `npm run db:deploy`      | Apply committed migrations                           |
 | `npm run db:seed`        | Upsert the question bank                             |
@@ -329,6 +332,71 @@ Trade-offs worth discussing:
   a mocked Google profile and an in-memory store. The Prisma store is tested against a real
   SQLite database, and the middleware against real encrypted cookies.
 
+## End-to-end tests and accessibility
+
+`npm run e2e` drives the production build in Chromium: sign-in, the full practice flow and the
+results it produces, plus an automated accessibility audit of every page.
+
+```bash
+npx playwright install chromium   # once
+npm run build                     # E2E runs against `next start`, not the dev server
+npm run e2e                       # fresh e2e/.state/e2e.db, app on :3100, then the suite
+```
+
+```
+ playwright.config.ts ── webServer: e2e/prepare.ts ──▶ fresh SQLite: migrations + real seed + personas
+        │                           └──▶ next start :3100 (sign-in on, offline feedback evaluator)
+        ▼
+ auth.spec.ts           redirects with return paths · OAuth start (stopped at Google's door)
+                        · forged cookie rejected · open-redirect guard · sign out
+ practice.spec.ts       question → answer → save → reload → submit → feedback → history/dashboard
+                        · another user gets 404 · multi-question autosave · empty states
+ accessibility.spec.ts  axe (WCAG 2.1 A/AA + 2.2 AA) on every page, light and dark
+                        · skip link · visible focus · keyboard-only practice session
+```
+
+- **Real app, real database, no mocks inside the server.** The suite runs the production build
+  against a fresh SQLite database with the committed migrations and the real question bank.
+  Feedback uses the offline heuristic evaluator, so results are deterministic and need no keys.
+- **Signing in without Google.** A test can't complete a real Google login, so the flow is split
+  at the one step that needs Google. `auth.spec.ts` clicks "Continue with Google" and checks the
+  authorization request NextAuth builds (client id, redirect URI, `prompt=select_account`,
+  state/PKCE, the preserved return path), intercepting it before it leaves the browser. Signed-in
+  tests start from the cookie a completed sign-in would set: users are provisioned through the
+  same `UserStore` the OAuth callback uses, and the cookie is encrypted with NextAuth's own
+  `encode()`, so middleware, `getServerSession`, `requireUser` and ownership checks all run for
+  real. The app has no test-only login route or auth bypass.
+- **Isolation by persona.** Each spec signs in as its own user (`e2e/support/personas.ts`), so
+  specs run in parallel on one database. Assertions about counts are relative to the state at
+  the start of the test, so CI retries stay meaningful.
+- **Offline caveat.** NextAuth fetches Google's OpenID discovery document when sign-in starts,
+  so that one test needs outbound network. It runs in CI and skips itself on a machine that
+  can't reach Google.
+
+### Accessibility
+
+Target: WCAG 2.1 AA. The automated audit (`@axe-core/playwright`) runs on every page in both
+color schemes, including the signed-in states that only exist mid-flow (a running timer, the
+submit confirmation, feedback results). Fixes from this pass:
+
+- A **skip link** ("Skip to main content") as the first Tab stop on every page. Every `<main>`
+  has the target id and `tabIndex={-1}`, so following the link moves focus, not just scroll.
+- A **visible focus ring** everywhere: 2px in the accent color, which has at least 3:1 contrast
+  in both themes, instead of the browser's 1px default.
+- **Focus management in the submit confirmation.** Opening it focuses "Yes, submit" (described
+  by the warning text), "Keep working" or Escape returns focus to "Submit", and loading the page
+  never steals focus.
+- The suite also checks that every page has a `<title>`. Next.js streams metadata, so after the
+  submit redirect the title arrives a moment after the content; the audit waits for it rather
+  than flaking.
+
+Automated tools find a fraction of real issues. Already in place from earlier items and covered
+by unit tests: labelled form controls, a `role="timer"` countdown with polite warnings at five
+minutes and one minute, `role="status"` save messages, score bars hidden from assistive tech
+with the number always printed, and a table alternative for the score chart. Not yet done: a
+screen-reader walkthrough with NVDA/VoiceOver, and reduced-motion handling (there is no
+animation yet).
+
 ## Project layout
 
 ```
@@ -346,6 +414,7 @@ src/
   generated/      Prisma client (generated on install, git-ignored)
   test/           Vitest setup and a throwaway-SQLite helper for database tests
 prisma/           schema, migrations, seed entry point
+e2e/              Playwright specs; support/ has personas, the session-cookie fixture and axe helper
 ```
 
 ## License
